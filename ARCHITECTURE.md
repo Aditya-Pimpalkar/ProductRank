@@ -52,7 +52,9 @@ ProductRank is a multi-stage retrieval and ranking service with an evaluation en
 
 **Single database is a deliberate choice.** PostgreSQL handles both retrieval modes: `pgvector` for dense vector similarity, and a **`pg_search` BM25 index (ParadeDB)** for the sparse baseline. This removes Elasticsearch entirely — one fewer service to run, no separate hosting headache, and a local stack that boots in under a minute.
 
-> **Implementation note (revised from the original plan).** The first cut used stock Postgres full-text search (`ts_rank_cd` over a `tsvector`). Measured on FiQA it scored **NDCG@10 ≈ 0.06 vs. the published BEIR BM25 ≈ 0.236** — a 4× gap — because stock FTS has **no IDF term weighting**: a document matching a common word ("tax") ranks as highly as one matching the rare, decisive term ("EWU"). That gap failed NFR-3 (baseline fidelity) *and* capped hybrid recall. The fix was to adopt ParadeDB's `pg_search`, a Tantivy-backed BM25 index that does real IDF weighting, while staying inside a single Postgres instance (ParadeDB *is* Postgres + `pg_search` + `pgvector`). The measured BM25 baseline is now **NDCG@10 = 0.238**, essentially matching the published number. This is the "Lucene/Tantivy upgrade path" the original doc named — taken early, because credible baselines are the project's whole point. A Lucene/Elasticsearch deployment remains the horizontal-scale path beyond a single node.
+> **Implementation note (revised from the original plan).** The first cut used stock Postgres full-text search (`ts_rank_cd` over a `tsvector`). Measured on FiQA it scored **NDCG@10 ≈ 0.06 vs. the published BEIR BM25 ≈ 0.236** — a 4× gap — because stock FTS has **no IDF term weighting**: a document matching a common word ("tax") ranks as highly as one matching the rare, decisive term ("EWU"). That gap failed NFR-3 (baseline fidelity) *and* capped hybrid recall. The fix was to adopt ParadeDB's `pg_search`, a Tantivy-backed BM25 index that does real IDF weighting, while staying inside a single Postgres instance (ParadeDB *is* Postgres + `pg_search` + `pgvector`). The measured BM25 baseline is now **NDCG@10 = 0.239** on FiQA, essentially matching the published number. This is the "Lucene/Tantivy upgrade path" the original doc named — taken early, because credible baselines are the project's whole point. A Lucene/Elasticsearch deployment remains the horizontal-scale path beyond a single node.
+>
+> The image is `paradedb/paradedb:0.15.26-pg17`. Confirmed in the running container: `SELECT extname FROM pg_extension` returns **both `pg_search` and `vector`**, and the `documents` table carries a `bm25` index *and* an `ivfflat` cosine index simultaneously — so the "single Postgres, two retrieval modes" claim is verified, not aspirational.
 
 ---
 
@@ -91,9 +93,44 @@ The differentiator. Search → results → **measurement**.
 - **Metrics:** NDCG@10, NDCG@100, MRR, MAP, Recall@10, Recall@100, Precision@10.
 - **Why NDCG is the headline:** it rewards relevant results *and* rewards them appearing near the top, applying a logarithmic positional discount. Accuracy is the wrong frame for ranking; NDCG is the right one.
 - **Why MRR alone is insufficient:** MRR only cares about the first relevant result's position — misleading when you care about the whole ranked list. Reported alongside, not instead of, NDCG.
-- **Ground truth:** FiQA qrels shipped with the BEIR dataset. No invented labels, no LLM judging in the MVP.
+- **Ground truth:** real qrels shipped with BEIR — FiQA and (sampled) MS MARCO. No invented labels, no LLM judging in the MVP. See §3.1 for how each dataset is used.
 - **Significance:** paired t-test (or bootstrap confidence interval) on per-query metrics between two variants, so a lift isn't reported when it's within noise.
 - **Failure analysis:** surface the queries where each variant underperforms — diagnostic value and great interview material ("here's a query where dense loses to BM25, and why").
+
+### 3.1 Datasets & measured results
+
+Two datasets, used for **different jobs**. Read the labels carefully — one is an honest absolute baseline, the other is reported for *relative deltas only*.
+
+**FiQA (`test`, full corpus) — the literature-comparable absolute baseline.**
+57,638 documents, 648 queries, full BEIR corpus. BM25 here lands at the published number, so absolute scores are trustworthy and comparable to the literature.
+
+| FiQA `test` — full 57,638-doc corpus · **literature-comparable** | BM25 | Dense | Hybrid (RRF) | Hybrid+Rerank |
+|---|---|---|---|---|
+| **NDCG@10** | **0.2391** (pub. BM25 ≈ 0.236 ✓) | **0.4483** | 0.3677 | 0.3754 |
+| NDCG@100 | 0.2938 | 0.5184 | 0.4499 | 0.4510 |
+| MRR | 0.3083 | 0.5295 | 0.4516 | 0.4547 |
+
+**MS MARCO (`dev`, sampled) — PRIMARY for variant-to-variant deltas, NOT leaderboard-comparable.**
+
+> ⚠️ **Sampled MS MARCO (51,070 docs: every judged answer present + ~50K file-order distractors, no hard negatives) — report DELTAS between variants only. Absolute values are inflated by an easy corpus and are NOT comparable to full-benchmark (8.8M-passage) MS MARCO leaderboards.** ~1.07 relevant docs/query (binary). Built by `data/ingest/msmarco.py`: it keeps all relevant passages and adds distractors in file order — so the answer is always present and no per-query hard negatives compete.
+
+| MS MARCO `dev` — sampled 51K · ⚠️ **deltas only, not leaderboard-comparable** | BM25 | Dense | Hybrid (RRF) | Hybrid+Rerank |
+|---|---|---|---|---|
+| **NDCG@10** | 0.7460 | 0.8999 | 0.8420 | **0.9413** |
+| MRR | 0.7275 | 0.8891 | 0.8245 | **0.9310** |
+| Recall@10 | 0.8357 | 0.9462 | 0.9218 | **0.9790** |
+| Recall@100 | 0.9338 | 0.9605 | **0.9930** | 0.9930 |
+
+All MS MARCO deltas are statistically significant (paired t-test + bootstrap CI, n=1000): Hybrid→Rerank +0.099 (p=9e-30) and Dense→Rerank +0.041 (p=3e-9).
+
+### 3.2 Named result — reranker domain transfer
+
+The headline empirical finding, and the reason both datasets exist:
+
+- **In-domain (sampled MS MARCO):** the `ms-marco-MiniLM-L-6-v2` cross-encoder lifts NDCG@10 from the hybrid candidate set **0.842 → 0.941** — the textbook candidate-generation → rerank gain, beating even pure dense (0.900).
+- **Out-of-domain (FiQA, financial):** the *same* reranker **degrades** results, **0.448 (dense) → 0.375 (rerank)**.
+
+**Why:** the cross-encoder was trained on MS MARCO web-search relevance, so it transfers well to in-domain queries and underperforms a strong general embedding (`text-embedding-3-small`) on out-of-domain financial text. This is empirical evidence that **reranker domain match matters** — a finding about transfer, *not* a tooling mistake. (Confirmed not a candidate-pool artifact: `scripts/diagnose_rerank.py` shows that even reranking dense's *own* top-100 on FiQA, the cross-encoder still loses to dense.) On MS MARCO the dense > hybrid gap is the known RRF dilution effect — fusion lifts Recall@100 (0.961 → 0.993) but an equal-weight blend with the ~20-point-weaker BM25 nudges the single relevant doc just below rank 1; the reranker then reorders that richer pool back to the top.
 
 ---
 
@@ -246,7 +283,12 @@ User accounts, saved searches, theming, mobile-first polish. The UI exists to ma
 
 ## 14. Deployment
 
-- Managed Postgres (with pgvector) + managed Redis + API container on a PaaS (e.g. Railway/Fly); frontend on Vercel.
+- **Database: self-hosted ParadeDB container, not a managed-Postgres add-on.** `pg_search` is a ParadeDB-specific extension and is **not available on managed Postgres offerings** (Railway/Fly Postgres, AWS RDS, Supabase, Neon) — they only expose a fixed extension allowlist (pgvector is common; pg_search is not). Because the sparse stage depends on `pg_search`, the database must run as the `paradedb/paradedb` Docker image. Fly.io and Railway can both run arbitrary container images, so this is straightforward: deploy ParadeDB as a container with a persistent volume, rather than provisioning their managed-Postgres product. (If a managed add-on were a hard requirement, the fallback is moving the sparse stage to a separate Lucene/Elasticsearch service — the horizontal-scale path in §10 — but that reintroduces the second service ParadeDB was chosen to avoid.)
+- Managed Redis + API container on a PaaS (Railway/Fly); frontend on Vercel.
 - TLS terminated by the platform; secrets in the platform secret store.
 - Cross-encoder runs in-process with a small model (`ms-marco-MiniLM-L-6-v2`); demo-query rerank results pre-computed so the public path is instant and cheap (NFR-1, §9.1 cost-control).
-- One-command local stack via Docker Compose (Postgres + Redis + API + frontend) booting in under a minute (NFR-2).
+- One-command local stack via Docker Compose (ParadeDB + Redis + API + frontend) booting in under a minute (NFR-2).
+
+### 14.1 Operational note — Apple Silicon (local dev)
+
+On macOS/arm64, `sentence-transformers` auto-selects the **MPS (Metal) backend for the cross-encoder, which deadlocks**: the rerank process hangs in an uninterruptible `metal gpu stream` wait with no progress (diagnosed via `sample`; it is *not* an out-of-memory or model-download issue). The rerank path therefore **pins to CPU** (`RERANK_DEVICE=cpu`, plus `torch.set_num_threads(1)` to dodge the Accelerate/OpenMP fork deadlock). Set `HF_HUB_OFFLINE=1` once the model is cached so a long batch eval doesn't stall on an HF Hub network check. Warm CPU rerank is ~1.1s/query — well within the demo budget. On Linux/CUDA deploy targets this constraint does not apply.

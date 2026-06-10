@@ -59,12 +59,22 @@ Two datasets, two outcomes — and the *difference between them* is the project'
 defensible insight: **a reranker only helps when it's in-domain.** All numbers below are
 real (`pytrec_eval`), with paired t-test + bootstrap-CI significance on per-query NDCG@10.
 
-### MS MARCO (`dev`) — the textbook candidate-generation → rerank lift
+> **Honest framing (read first).** The MS MARCO corpus here is a **51K sample** in which every
+> answer is guaranteed present among ~50K file-order distractors with no hard negatives — so its
+> *absolute* scores are inflated by an easy task and are **not comparable to full-benchmark
+> leaderboards**; use it for the **variant-to-variant deltas and the in-domain reranker lift**.
+> **FiQA (full 57K corpus, BM25 0.239 ≈ published 0.236) is the honest absolute baseline.**
 
-1,000 dev queries, 51,070-passage sampled corpus (every judged passage + 50K distractors),
-top-100 retrieval. The cross-encoder is **in-domain** here (it was trained on MS MARCO):
+### MS MARCO (`dev`) — the in-domain reranker lift (deltas, not absolutes)
 
-| Metric | BM25 | Dense | Hybrid (RRF) | **Hybrid + Rerank** |
+> ⚠️ **Sampled MS MARCO — 51,070 docs (every judged answer present + ~50K file-order distractors,
+> no hard negatives). Report DELTAS between variants only; absolute values are NOT comparable to
+> full-benchmark (8.8M-passage) MS MARCO leaderboards.**
+
+1,000 dev queries (~1.07 relevant/query, binary), top-100 retrieval. The cross-encoder is
+**in-domain** here (it was trained on MS MARCO):
+
+| Metric (sampled MS MARCO — deltas only) | BM25 | Dense | Hybrid (RRF) | **Hybrid + Rerank** |
 |---|---|---|---|---|
 | **NDCG@10** | 0.7460 | 0.8999 | 0.8420 | **0.9413** |
 | NDCG@100 | 0.7671 | 0.9037 | 0.8595 | **0.9446** |
@@ -80,12 +90,13 @@ top-100 retrieval. The cross-encoder is **in-domain** here (it was trained on MS
 | Hybrid → Hybrid+Rerank | **+0.099** | 9e-30 | ✅ |
 | Dense → Hybrid+Rerank | **+0.041** | 3e-9 | ✅ (beats the strong dense baseline) |
 
-### FiQA (`test`) — where the reranker *doesn't* help, and why
+### FiQA (`test`) — the literature-comparable absolute baseline (and where the reranker *doesn't* help)
 
-648 test queries, 57,638 documents. **BM25 = 0.2391 matches the published BEIR FiQA baseline
-(~0.236)** via ParadeDB `pg_search` real BM25 — see [docs/BASELINE.md](docs/BASELINE.md).
+> ✅ **Full BEIR FiQA corpus — 57,638 documents, 648 queries. Absolute scores are
+> literature-comparable: BM25 = 0.2391 matches the published BEIR FiQA baseline (~0.236)** via
+> ParadeDB `pg_search` real BM25 — see [docs/BASELINE.md](docs/BASELINE.md).
 
-| Metric | BM25 | Dense | Hybrid (RRF) | Hybrid + Rerank |
+| Metric (full FiQA corpus — literature-comparable) | BM25 | Dense | Hybrid (RRF) | Hybrid + Rerank |
 |---|---|---|---|---|
 | **NDCG@10** | 0.2391 | **0.4483** | 0.3677 | 0.3754 |
 | NDCG@100 | 0.2938 | **0.5184** | 0.4499 | 0.4510 |
