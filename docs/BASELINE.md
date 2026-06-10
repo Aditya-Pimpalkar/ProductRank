@@ -39,10 +39,11 @@ matching the rare, decisive term ("EWU"). Two compounding bugs were found along 
 
 The fix that actually closed the gap was switching the sparse stage to **ParadeDB's
 `pg_search`** (Tantivy-backed BM25 with real IDF), staying inside a single Postgres
-instance. The baseline then matched the published number almost exactly. See
-`ARCHITECTURE.md §1` for the full decision record.
+instance. The baseline then matched the published number almost exactly. See the
+[README](../README.md#architecture) for the full decision record.
 
 ## Variant comparison
 
-See the results table in `README.md` and `results/eval_test.json` for the full four-variant
-comparison (BM25 / Dense / Hybrid / Hybrid+Rerank) and the monotonic lift across stages.
+See the results table in the [README](../README.md#key-results) and
+`results/eval_test.json` for the full four-variant comparison
+(BM25 / Dense / Hybrid / Hybrid+Rerank).
