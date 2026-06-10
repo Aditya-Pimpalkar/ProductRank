@@ -1,0 +1,40 @@
+# Local stack: ParadeDB (Postgres + pg_search BM25 + pgvector) + Redis.
+# Boots in well under a minute (NFR-2). ParadeDB keeps the "single Postgres" design
+# (ARCHITECTURE §1) while giving a *real* BM25 baseline (pg_search/Tantivy) instead of
+# the IDF-less ts_rank approximation — needed to hit the published-baseline fidelity in
+# NFR-3. The API and frontend are added in later milestones.
+
+services:
+  postgres:
+    image: paradedb/paradedb:0.15.26-pg17
+    container_name: productrank-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-productrank}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-productrank}
+      POSTGRES_DB: ${POSTGRES_DB:-productrank}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-productrank} -d ${POSTGRES_DB:-productrank}"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: productrank-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      # Host 6380 (not 6379) so ProductRank doesn't collide with another local
+      # Redis on the default port. Container port stays 6379. Matches REDIS_URL in .env.
+      - "${REDIS_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
