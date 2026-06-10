@@ -1,14 +1,13 @@
-# BM25 Baseline Sanity Check (PR-11)
+# BM25 Baseline Sanity Check
 
 **Dataset:** BEIR / FiQA-2018, `test` split (648 queries, 57,638 documents).
 **Eval tool:** `pytrec_eval` (trec_eval binding).
 
 ## Why this check exists
 
-NFR-3 asks the BM25 baseline to land *within range of the published BEIR FiQA baseline*.
-A baseline that matches the literature is a credibility signal in interviews ("my number
-matches the published one"); a baseline that doesn't means something is wrong with the
-retrieval or the eval harness.
+The BM25 baseline should land within range of the published BEIR FiQA baseline. A baseline
+that matches the literature confirms the retrieval and evaluation harness are wired
+correctly; a baseline that doesn't indicates a bug in one of them.
 
 ## Published reference
 
@@ -26,7 +25,7 @@ The BEIR paper / leaderboard reports **BM25 (Anserini/Lucene) NDCG@10 ≈ 0.236*
 | Recall@100 | 0.5100 | ~0.539 | within range ✓ |
 | P@10 | 0.0665 | — | |
 
-## The detour worth narrating in interviews
+## How the baseline was corrected
 
 The first implementation used **stock Postgres FTS** (`ts_rank_cd` over a `tsvector`).
 It measured **NDCG@10 ≈ 0.06** — a 4× miss. Root cause: stock FTS has **no IDF term
@@ -40,7 +39,7 @@ matching the rare, decisive term ("EWU"). Two compounding bugs were found along 
 The fix that actually closed the gap was switching the sparse stage to **ParadeDB's
 `pg_search`** (Tantivy-backed BM25 with real IDF), staying inside a single Postgres
 instance. The baseline then matched the published number almost exactly. See the
-[README](../README.md#architecture) for the full decision record.
+[README](../README.md#high-level-design) for the full decision record.
 
 ## Variant comparison
 
