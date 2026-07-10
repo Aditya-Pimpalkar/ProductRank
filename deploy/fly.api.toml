@@ -1,0 +1,36 @@
+# Fly.io config for the ProductRank API. Deploy from the repo root:
+#   fly deploy -c deploy/fly.api.toml
+#
+# Secrets (never in this file) are set once with `fly secrets set`:
+#   OPENAI_API_KEY, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST (the DB app's
+#   .internal hostname), REDIS_URL (Upstash), FRONTEND_ORIGIN (the Vercel URL).
+
+app = "productrank-api"
+primary_region = "iad"
+
+[build]
+  dockerfile = "deploy/Dockerfile.api"
+
+[env]
+  RERANK_DEVICE = "cpu"
+  HF_HUB_OFFLINE = "1"
+  POSTGRES_PORT = "5432"
+  DB_NAME_MSMARCO = "productrank_msmarco"
+  DB_NAME_FIQA = "productrank_fiqa"
+  LOG_LEVEL = "INFO"
+
+# Per-deploy schema migration for BOTH databases (idempotent; safe to re-run).
+# seed/embed are NOT here — they are one-time manual steps (seeding wipes).
+[deploy]
+  release_command = "sh deploy/migrate.sh"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = false      # keep warm: avoids the torch/model cold-start
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"                  # torch + cross-encoder + headroom

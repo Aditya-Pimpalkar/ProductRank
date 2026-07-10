@@ -1,0 +1,37 @@
+# API image: FastAPI + retrieval + the cross-encoder baked in.
+# Build context is the repo ROOT:  docker build -f deploy/Dockerfile.api .
+FROM python:3.12-slim
+
+# Runtime defaults. NOTE: HF_HUB_OFFLINE is deliberately NOT set yet — the model download
+# below needs network. It is switched on after the model is cached into the image.
+ENV PYTHONUNBUFFERED=1 \
+    RERANK_DEVICE=cpu \
+    TOKENIZERS_PARALLELISM=false \
+    OMP_NUM_THREADS=2
+
+WORKDIR /app
+
+# uv for fast, locked installs.
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Dependencies first (cached layer). README.md is referenced by pyproject.
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --frozen --no-dev
+
+# Application code + migrations + ingest + recorded results (dashboard reads results/*.json).
+COPY src ./src
+COPY alembic ./alembic
+COPY alembic.ini ./
+COPY data ./data
+COPY seed.py seed_msmarco.py ./
+COPY results ./results
+COPY deploy/warm.py ./deploy/warm.py
+
+# Bake the cross-encoder into the image's HF cache (download happens here, at build time).
+RUN uv run python -c "from sentence_transformers import CrossEncoder; CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
+
+# Now pin to offline so request-path model loads never hit the HF Hub network.
+ENV HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
+
+EXPOSE 8000
+CMD ["uv", "run", "uvicorn", "productrank.main:app", "--host", "0.0.0.0", "--port", "8000"]
