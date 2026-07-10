@@ -21,7 +21,7 @@ from data.ingest.fiqa import (
 )
 
 from productrank import ingest
-from productrank.db import SessionLocal
+from productrank.db import sessionmaker_for
 
 
 def main() -> None:
@@ -33,7 +33,8 @@ def main() -> None:
     print("→ downloading / locating FiQA …")
     fiqa_dir = download_fiqa(Path(args.raw_dir))
 
-    with SessionLocal() as session:
+    # FiQA always seeds into the `fiqa` database (Path 2: one database per dataset).
+    with sessionmaker_for("fiqa")() as session:
         before = ingest.counts(session)
 
         print("→ loading documents …")

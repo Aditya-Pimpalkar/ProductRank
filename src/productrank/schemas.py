@@ -7,6 +7,8 @@ capped so a public demo can't be used to hammer the embedding/rerank path
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 from pydantic import BaseModel, Field
 
 from productrank.services.search import Variant
@@ -15,9 +17,19 @@ MAX_QUERY_CHARS = 512
 MAX_TOP_K = 50
 
 
+class Dataset(StrEnum):
+    """The dataset allowlist. Used as a request-model field type, so Pydantic rejects any
+    unknown value with a 422 *before* it can reach connection/dbname construction
+    (hard requirement: the raw param never touches the engine registry)."""
+
+    MSMARCO = "msmarco"
+    FIQA = "fiqa"
+
+
 class SearchRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=MAX_QUERY_CHARS)
     variant: Variant = Variant.HYBRID_RERANK
+    dataset: Dataset = Dataset.MSMARCO
     top_k: int = Field(default=10, ge=1, le=MAX_TOP_K)
     candidate_k: int = Field(default=100, ge=10, le=200)
 
@@ -55,14 +67,16 @@ class HealthResponse(BaseModel):
 
 # --- experiments (A/B) -----------------------------------------------------
 
-MAX_QUERY_SET = 1000
+# Public-deploy cap: an A/B run embeds + reranks query_set_size queries, so this bounds
+# both OpenAI spend and CPU per job (deploy hardening).
+MAX_QUERY_SET = 100
 
 
 class ExperimentRequest(BaseModel):
     variant_a: Variant = Variant.BM25
     variant_b: Variant = Variant.HYBRID_RERANK
-    query_set_size: int = Field(default=100, ge=2, le=MAX_QUERY_SET)
-    split: str = "dev"  # MS MARCO's eval split (the currently-loaded dataset)
+    dataset: Dataset = Dataset.MSMARCO  # split is derived from the dataset
+    query_set_size: int = Field(default=50, ge=2, le=MAX_QUERY_SET)
 
 
 class ExperimentResponse(BaseModel):
@@ -71,6 +85,7 @@ class ExperimentResponse(BaseModel):
     id: str
     status: str  # pending | running | completed | error
     progress: float = 0.0  # 0..1
+    dataset: Dataset | None = None
     variant_a: Variant | None = None
     variant_b: Variant | None = None
     query_set_size: int | None = None

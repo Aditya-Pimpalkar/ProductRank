@@ -11,13 +11,18 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from productrank import cache
 from productrank.ratelimit import limiter
 from productrank.schemas import ExperimentRequest, ExperimentResponse
-from productrank.services.experiments import create_job, get_job, run_experiment
+from productrank.services.experiments import (
+    acquire_job_slot,
+    create_job,
+    get_job,
+    run_experiment,
+)
 
 router = APIRouter(prefix="/v1", tags=["experiments"])
 
 
 @router.post("/experiments", response_model=ExperimentResponse, status_code=202)
-@limiter.limit("10/minute")
+@limiter.limit("5/minute")  # deploy hardening: tighter than search; each run is heavy
 def start_experiment(
     request: Request,  # required by slowapi
     body: ExperimentRequest,
@@ -25,8 +30,11 @@ def start_experiment(
 ) -> ExperimentResponse:
     if cache.get_client() is None:
         raise HTTPException(503, "Redis unavailable — experiment jobs require Redis for state.")
+    # Concurrency cap: bound simultaneous CPU-heavy A/B runs (slot released in run_experiment).
+    if not acquire_job_slot():
+        raise HTTPException(429, "Too many experiments running; try again shortly.")
     job_id = create_job(
-        body.variant_a.value, body.variant_b.value, body.query_set_size, body.split
+        body.variant_a.value, body.variant_b.value, body.query_set_size, body.dataset.value
     )
     background.add_task(run_experiment, job_id)
     state = get_job(job_id)

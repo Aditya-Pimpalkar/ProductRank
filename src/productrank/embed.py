@@ -15,8 +15,8 @@ from __future__ import annotations
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
-from productrank.config import settings
-from productrank.db import SessionLocal, engine
+from productrank.config import DEFAULT_DATASET, settings
+from productrank.db import engine_for, sessionmaker_for
 from productrank.models import Document
 from productrank.retrieval.embeddings import embed_texts
 
@@ -45,10 +45,10 @@ def remaining(session: Session) -> int:
     )
 
 
-def embed_corpus() -> int:
+def embed_corpus(dataset: str = DEFAULT_DATASET) -> int:
     """Embed every document missing an embedding. Returns count embedded this run."""
     embedded = 0
-    with SessionLocal() as session:
+    with sessionmaker_for(dataset)() as session:
         todo = remaining(session)
         if todo == 0:
             print("All documents already embedded.")
@@ -80,15 +80,14 @@ def embed_corpus() -> int:
     return embedded
 
 
-def build_ivfflat_index() -> None:
-    """(Re)build the IVFFlat cosine index on the embedding column.
+def build_ivfflat_index(dataset: str = DEFAULT_DATASET) -> None:
+    """(Re)build the IVFFlat cosine index on the embedding column for a dataset's database.
 
     Tuning: `lists` partitions the vectors into clusters; a common heuristic is
     ~sqrt(rows). `probes` (set per-query at search time) trades recall for latency.
-    Both are config-driven (ARCHITECTURE §2.5).
     """
     lists = settings.ivfflat_lists
-    with engine.begin() as conn:
+    with engine_for(dataset).begin() as conn:
         n = conn.execute(
             text("SELECT count(*) FROM documents WHERE embedding IS NOT NULL")
         ).scalar_one()

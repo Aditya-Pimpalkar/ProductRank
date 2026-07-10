@@ -67,19 +67,21 @@ def set_query_embedding(query: str, vector: list[float]) -> None:
 
 # --- result-set cache ------------------------------------------------------
 
-def get_result(variant: str, query: str, top_k: int) -> Any | None:
+def get_result(dataset: str, variant: str, query: str, top_k: int) -> Any | None:
     client = get_client()
     if client is None:
         return None
-    raw = client.get(f"res:{variant}:{top_k}:{_hash(query)}")
+    raw = client.get(f"res:{dataset}:{variant}:{top_k}:{_hash(query)}")
     return json.loads(raw) if raw else None
 
 
-def set_result(variant: str, query: str, top_k: int, payload: Any) -> None:
+def set_result(dataset: str, variant: str, query: str, top_k: int, payload: Any) -> None:
     client = get_client()
     if client is None:
         return
-    client.set(f"res:{variant}:{top_k}:{_hash(query)}", json.dumps(payload), ex=RESULT_TTL)
+    client.set(
+        f"res:{dataset}:{variant}:{top_k}:{_hash(query)}", json.dumps(payload), ex=RESULT_TTL
+    )
 
 
 def cache_stats() -> dict[str, Any]:

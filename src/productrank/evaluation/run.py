@@ -19,7 +19,8 @@ from pathlib import Path
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from productrank.db import SessionLocal
+from productrank.config import DEFAULT_DATASET
+from productrank.db import sessionmaker_for
 from productrank.evaluation.metrics import METRIC_KEYS, METRIC_LABELS, Qrels, evaluate
 from productrank.models import Document, Qrel, Query
 from productrank.retrieval.embeddings import embed_texts
@@ -83,8 +84,9 @@ def run_evaluation(
     split: str = "test",
     only: list[str] | None = None,
     tag: str | None = None,
+    dataset: str = DEFAULT_DATASET,
 ) -> dict:
-    with SessionLocal() as session:
+    with sessionmaker_for(dataset)() as session:
         queries = _load_queries(session, split, limit)
         if not queries:
             raise RuntimeError(f"No queries for split={split}. Did you run seed.py?")

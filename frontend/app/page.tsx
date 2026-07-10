@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { EXAMPLE_QUERIES, searchAll, type SearchResponse } from "@/lib/api";
+import { useDataset } from "@/lib/dataset";
 import { computeDivergence } from "@/lib/divergence";
 import { ResultColumn } from "@/components/ResultColumn";
 import { HowItWorks } from "@/components/HowItWorks";
@@ -10,11 +11,18 @@ import { GlossaryTerm } from "@/components/InfoTip";
 const TOP_K = 10;
 
 export default function SearchComparisonPage() {
+  const { dataset } = useDataset();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResponse[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hoveredDoc, setHoveredDoc] = useState<string | null>(null);
+
+  // Switching dataset clears the previous corpus's results so nothing stale lingers.
+  useEffect(() => {
+    setResults(null);
+    setError(null);
+  }, [dataset]);
 
   async function run(q: string) {
     const text = q.trim();
@@ -23,7 +31,7 @@ export default function SearchComparisonPage() {
     setLoading(true);
     setError(null);
     try {
-      setResults(await searchAll(text, TOP_K));
+      setResults(await searchAll(text, TOP_K, dataset));
     } catch (e) {
       setError(e instanceof Error ? e.message : "search failed");
       setResults(null);
@@ -71,7 +79,7 @@ export default function SearchComparisonPage() {
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs font-medium text-slate-500">Try one:</span>
-        {EXAMPLE_QUERIES.map((q) => (
+        {EXAMPLE_QUERIES[dataset].map((q) => (
           <button
             key={q}
             onClick={() => run(q)}

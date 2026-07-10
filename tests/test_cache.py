@@ -29,8 +29,16 @@ def test_missing_key_returns_none(cache_mod):
 
 def test_result_round_trip(cache_mod):
     payload = {"hits": [["d1", 1.0], ["d2", 0.5]]}
-    cache_mod.set_result("hybrid", "some query", 10, payload)
-    assert cache_mod.get_result("hybrid", "some query", 10) == payload
+    cache_mod.set_result("msmarco", "hybrid", "some query", 10, payload)
+    assert cache_mod.get_result("msmarco", "hybrid", "some query", 10) == payload
+
+
+def test_result_cache_is_dataset_scoped(cache_mod):
+    """Same query+variant under different datasets must not collide."""
+    cache_mod.set_result("msmarco", "bm25", "shared q", 10, {"d": "ms"})
+    cache_mod.set_result("fiqa", "bm25", "shared q", 10, {"d": "fi"})
+    assert cache_mod.get_result("msmarco", "bm25", "shared q", 10) == {"d": "ms"}
+    assert cache_mod.get_result("fiqa", "bm25", "shared q", 10) == {"d": "fi"}
 
 
 def test_fail_soft_when_redis_down(monkeypatch):
@@ -40,4 +48,4 @@ def test_fail_soft_when_redis_down(monkeypatch):
     monkeypatch.setattr(cache, "get_client", lambda: None)
     cache.set_query_embedding("x", [1.0])  # must not raise
     assert cache.get_query_embedding("x") is None
-    assert cache.get_result("v", "x", 10) is None
+    assert cache.get_result("msmarco", "v", "x", 10) is None

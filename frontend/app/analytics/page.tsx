@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { VARIANT_COLOR, VARIANT_LABEL, VARIANTS, type Variant } from "@/lib/api";
 import { getResults, type ResultsResponse } from "@/lib/results";
+import { useDataset } from "@/lib/dataset";
 import { GlossaryTerm } from "@/components/InfoTip";
 
 const METRIC_ORDER = [
@@ -35,12 +36,17 @@ const METRIC_LABEL: Record<string, string> = {
 };
 
 export default function AnalyticsPage() {
+  const { dataset } = useDataset();
   const [data, setData] = useState<ResultsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getResults().then(setData).catch((e) => setError(String(e)));
-  }, []);
+    setData(null);
+    setError(null);
+    getResults(dataset)
+      .then(setData)
+      .catch((e) => setError(String(e)));
+  }, [dataset]);
 
   if (error)
     return (

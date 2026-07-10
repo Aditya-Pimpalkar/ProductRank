@@ -10,6 +10,7 @@ import {
   type Variant,
 } from "@/lib/api";
 import { GlossaryTerm } from "@/components/InfoTip";
+import { useDataset } from "@/lib/dataset";
 
 const METRIC_LABEL: Record<string, string> = {
   ndcg_cut_10: "NDCG@10",
@@ -31,9 +32,10 @@ const METRIC_ORDER = [
 ];
 
 export default function ExperimentsPage() {
+  const { dataset } = useDataset();
   const [variantA, setVariantA] = useState<Variant>("bm25");
   const [variantB, setVariantB] = useState<Variant>("hybrid_rerank");
-  const [size, setSize] = useState(100);
+  const [size, setSize] = useState(50);
   const [exp, setExp] = useState<Experiment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -43,7 +45,7 @@ export default function ExperimentsPage() {
   async function run() {
     setError(null);
     try {
-      const job = await startExperiment(variantA, variantB, size);
+      const job = await startExperiment(variantA, variantB, size, dataset);
       setExp(job);
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = setInterval(async () => {
@@ -83,9 +85,9 @@ export default function ExperimentsPage() {
           <input
             type="number"
             min={2}
-            max={648}
+            max={100}
             value={size}
-            onChange={(e) => setSize(Number(e.target.value))}
+            onChange={(e) => setSize(Math.min(100, Number(e.target.value)))}
             className="w-28 rounded-md border border-slate-300 px-2 py-1.5 text-sm"
           />
         </label>

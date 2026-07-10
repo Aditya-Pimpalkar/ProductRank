@@ -3,13 +3,15 @@
     python seed_msmarco.py                 # wipe + load 1000 dev queries, ~51K passages
     python seed_msmarco.py --queries 2000 --distractors 80000
 
-MS MARCO is the PRD §10 contingency dataset: on it the cross-encoder is in-domain, so
-reranking gives the textbook lift over first-stage retrieval (which FiQA didn't show).
-The full corpus is 8.8M passages; we load a self-contained sample (see data/ingest/
-msmarco.py). This WIPES any existing corpus first — doc ids aren't namespaced across
-datasets, so FiQA and MS MARCO can't coexist in one schema.
+On MS MARCO the cross-encoder is in-domain, so reranking gives the textbook lift over
+first-stage retrieval (which FiQA does not show). The full corpus is 8.8M passages; we
+load a self-contained sample (see data/ingest/msmarco.py).
 
-After seeding: `python -m productrank.cli embed` then `... eval --split dev`.
+MS MARCO seeds into its own `msmarco` database (Path 2: one database per dataset inside a
+single ParadeDB instance), so it never touches the FiQA corpus. The wipe below clears only
+the msmarco database before reloading.
+
+After seeding: `python -m productrank.cli embed --dataset msmarco` then `eval --dataset msmarco`.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from pathlib import Path
 from data.ingest.msmarco import MsMarcoSample, download_msmarco
 
 from productrank import ingest
-from productrank.db import SessionLocal
+from productrank.db import sessionmaker_for
 
 
 def main() -> None:
@@ -47,9 +49,11 @@ def main() -> None:
     print(f"  sampled {len(sample.query_ids)} queries, "
           f"{len(sample.relevant_doc_ids)} relevant passages, {len(sample.qrels)} qrels")
 
-    with SessionLocal() as session:
+    # MS MARCO always seeds into the `msmarco` database (Path 2: one database per dataset).
+    # Wiping is scoped to that database only — it never touches the fiqa database.
+    with sessionmaker_for("msmarco")() as session:
         if not args.no_wipe:
-            print("→ wiping existing corpus (dataset swap) …")
+            print("→ wiping existing corpus (msmarco database only) …")
             ingest.wipe(session)
 
         print("→ loading sampled corpus (relevant + distractors) …")

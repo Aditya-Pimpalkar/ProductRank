@@ -2,9 +2,12 @@
 
 An A/B eval over hundreds of queries is a batch workload, not a request-path operation,
 so it runs as a background job with state in Redis and is polled via GET. Async is scoped
-*strictly* to eval runs — the search path stays synchronous (ARCHITECTURE §7). At this
-scale FastAPI BackgroundTasks is sufficient; a Celery queue is the documented upgrade
-path for concurrent, long-running eval.
+*strictly* to eval runs — the search path stays synchronous. At this scale FastAPI
+BackgroundTasks is sufficient; a Celery queue is the documented upgrade path.
+
+Multi-dataset: the job carries a validated `dataset`, and the run binds to that dataset's
+sessionmaker — so an A/B run evaluates the selected corpus and never silently defaults to
+one database.
 """
 
 from __future__ import annotations
@@ -15,7 +18,8 @@ import uuid
 from sqlalchemy import select
 
 from productrank import cache
-from productrank.db import SessionLocal
+from productrank.config import DATASET_SPLIT
+from productrank.db import sessionmaker_for
 from productrank.evaluation.metrics import METRIC_KEYS, evaluate
 from productrank.evaluation.run import _load_qrels, _load_queries
 from productrank.evaluation.significance import paired_significance
@@ -27,15 +31,40 @@ from productrank.services.search import Variant, search
 log = get_logger("experiments")
 
 JOB_TTL = 60 * 60  # 1 hour — results are cheap to recompute
-# Metrics we report significance on (the headline ranking metrics).
 SIG_METRICS = ["ndcg_cut_10", "ndcg_cut_100", "recip_rank", "map"]
+
+# Deploy hardening: bound how many A/B runs execute at once (each is CPU-heavy via rerank).
+MAX_CONCURRENT_JOBS = 2
+_RUNNING_KEY = "jobs:running"
 
 
 def _job_key(job_id: str) -> str:
     return f"job:{job_id}"
 
 
-def create_job(variant_a: str, variant_b: str, query_set_size: int, split: str) -> str:
+def acquire_job_slot() -> bool:
+    """Atomically reserve a concurrency slot. Returns False when the cap is reached.
+    Fail-soft: if Redis is down, allow the run (the endpoint already gates on Redis)."""
+    client = cache.get_client()
+    if client is None:
+        return True
+    n = client.incr(_RUNNING_KEY)
+    client.expire(_RUNNING_KEY, 900)  # self-heal a leaked counter after 15 min
+    if n > MAX_CONCURRENT_JOBS:
+        client.decr(_RUNNING_KEY)
+        return False
+    return True
+
+
+def _release_job_slot() -> None:
+    client = cache.get_client()
+    if client is None:
+        return
+    if client.decr(_RUNNING_KEY) < 0:
+        client.set(_RUNNING_KEY, 0)
+
+
+def create_job(variant_a: str, variant_b: str, query_set_size: int, dataset: str) -> str:
     job_id = uuid.uuid4().hex[:12]
     _write(
         job_id,
@@ -43,10 +72,11 @@ def create_job(variant_a: str, variant_b: str, query_set_size: int, split: str) 
             "id": job_id,
             "status": "pending",
             "progress": 0.0,
+            "dataset": dataset,
+            "split": DATASET_SPLIT[dataset],
             "variant_a": variant_a,
             "variant_b": variant_b,
             "query_set_size": query_set_size,
-            "split": split,
         },
     )
     return job_id
@@ -83,25 +113,28 @@ def _build_run(session, variant: Variant, queries, query_vectors, top_k):
 
 
 def run_experiment(job_id: str) -> None:
-    """Execute the A/B run end to end and persist results to Redis. Runs in the
-    background; never raises into the request path — failures land in the job state."""
+    """Execute the A/B run end to end against the job's dataset and persist results to
+    Redis. Runs in the background; never raises into the request path."""
     state = get_job(job_id)
     if state is None:
+        _release_job_slot()
         return
     try:
         state["status"] = "running"
         _write(job_id, state)
 
+        dataset = state["dataset"]
+        split = state["split"]
         variant_a = Variant(state["variant_a"])
         variant_b = Variant(state["variant_b"])
         size = int(state["query_set_size"])
-        split = state["split"]
 
-        with SessionLocal() as session:
+        # Bind to the selected dataset's database (hard requirement: no silent default).
+        SessionMaker = sessionmaker_for(dataset)
+        with SessionMaker() as session:
             queries = _load_queries(session, split, limit=size)
             qrels = _load_qrels(session, list(queries))
 
-            # Embed shared query set once, reused across both variants.
             query_vectors: dict[str, list[float]] = {}
             if variant_a != Variant.BM25 or variant_b != Variant.BM25:
                 qids = list(queries)
@@ -147,9 +180,11 @@ def run_experiment(job_id: str) -> None:
             }
         )
         _write(job_id, state)
-        log.info("experiment_done", job_id=job_id, a=variant_a.value, b=variant_b.value)
+        log.info("experiment_done", job_id=job_id, dataset=dataset, a=variant_a.value, b=variant_b.value)
     except Exception as exc:  # noqa: BLE001 — surface failure in job state, never crash
         state["status"] = "error"
         state["error"] = str(exc)
         _write(job_id, state)
         log.error("experiment_failed", job_id=job_id, error=str(exc))
+    finally:
+        _release_job_slot()
