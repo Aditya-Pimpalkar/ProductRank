@@ -1,0 +1,20 @@
+# Minimal Redis as a Fly app (cache + async job state). Reachable only over the Fly
+# private network at redis://productrank-redis.internal:6379 — no public service block,
+# no auth needed. Cache is fail-soft, so this never needs persistence; eviction keeps it
+# bounded. (Fly's managed Upstash Redis uses an interactive TUI that can't be scripted,
+# so a small container is the reproducible choice.)
+#
+# Deploy:  fly deploy -c deploy/fly.redis.toml
+
+app = "productrank-redis"
+primary_region = "iad"
+
+[build]
+  image = "redis:7-alpine"
+
+[processes]
+  app = "redis-server --maxmemory 200mb --maxmemory-policy allkeys-lru --appendonly no --save ''"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

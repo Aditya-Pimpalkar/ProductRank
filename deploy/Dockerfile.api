@@ -32,7 +32,9 @@ COPY alembic.ini ./
 COPY data ./data
 COPY seed.py seed_msmarco.py ./
 COPY results ./results
-COPY deploy/warm.py ./deploy/warm.py
+# Deploy-time scripts: migrate.sh is the release_command; createdbs.py creates both
+# databases; warm.py pre-warms the demo caches.
+COPY deploy/migrate.sh deploy/createdbs.py deploy/warm.py ./deploy/
 
 # Now install the project itself (source is present).
 RUN uv sync --frozen --no-dev

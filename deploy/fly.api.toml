@@ -9,7 +9,9 @@ app = "productrank-api"
 primary_region = "iad"
 
 [build]
-  dockerfile = "deploy/Dockerfile.api"
+  # Path is relative to THIS config's directory (deploy/). Deploy from the repo root with
+  # the root as build context:  fly deploy . -c deploy/fly.api.toml
+  dockerfile = "Dockerfile.api"
 
 [env]
   RERANK_DEVICE = "cpu"
