@@ -22,6 +22,7 @@ dependencies = [
     "numpy>=1.26",               # vectors, fusion, significance math
     "scipy>=1.11",               # paired t-test / bootstrap (significance)
     "sentence-transformers>=3.0", # cross-encoder rerank (ms-marco-MiniLM-L-6-v2)
+    "torch>=2.2",                # rerank backend; pinned to the CPU build on Linux (below)
     "pytrec-eval-terrier>=0.5",  # IR-standard metrics (trec_eval binding)
     "structlog>=24.1",           # structured JSON logs + correlation ids
     "slowapi>=0.1.9",            # per-IP rate limiting
@@ -79,3 +80,15 @@ addopts = "-q"
 
 [tool.uv]
 package = true
+
+# Rerank runs on CPU (RERANK_DEVICE=cpu), so on Linux pull the CPU-only torch build from
+# PyTorch's cpu index. This drops the ~4.5 GB CUDA stack (nvidia-*, triton) that the
+# default wheel bundles — shrinking the deploy image from ~9 GB to ~2.5 GB. macOS keeps
+# the default PyPI torch (already CPU/MPS, no CUDA), so local dev is unchanged.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true

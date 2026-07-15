@@ -12,8 +12,11 @@ differences.
 The project runs at demonstration scale (≤57K documents, pretrained models, single node).
 The architecture is built the way production systems are; the scale is stated honestly.
 
-<!-- LIVE DEMO: <url> -->
-<!-- DEMO GIF: assets/demo.gif -->
+<!-- LIVE DEMO: once deployed, replace the line below with: **Live demo:** <url> -->
+_Live demo: coming soon._
+
+<!-- DEMO GIF: record localhost:3000, save as assets/demo.gif, then uncomment the next line -->
+<!-- ![ProductRank demo](assets/demo.gif) -->
 
 ---
 
