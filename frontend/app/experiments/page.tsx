@@ -117,6 +117,10 @@ export default function ExperimentsPage() {
               style={{ width: `${Math.max(5, (exp.progress || 0) * 100)}%` }}
             />
           </div>
+          <p className="mt-2 text-xs text-slate-400">
+            Reranking runs a cross-encoder over every query on CPU — a rerank A/B can take a
+            minute or two. The bar advances as each query is scored.
+          </p>
         </div>
       )}
 

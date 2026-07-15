@@ -97,9 +97,13 @@ def _write(job_id: str, state: dict) -> None:
     client.set(_job_key(job_id), json.dumps(state), ex=JOB_TTL)
 
 
-def _build_run(session, variant: Variant, queries, query_vectors, top_k):
+def _build_run(session, variant: Variant, queries, query_vectors, top_k, on_progress=None):
+    """Build a trec_eval run for one variant. `on_progress(fraction)` is called as queries
+    complete (throttled by the caller) so the UI's progress bar advances during the
+    CPU-heavy rerank instead of sitting at a static value."""
     run: dict[str, dict[str, float]] = {}
-    for qid, qtext in queries.items():
+    total = len(queries) or 1
+    for i, (qid, qtext) in enumerate(queries.items(), 1):
         res = search(
             session,
             qtext,
@@ -109,6 +113,8 @@ def _build_run(session, variant: Variant, queries, query_vectors, top_k):
             query_vector=query_vectors.get(qid),
         )
         run[qid] = {h.doc_id: h.score for h in res.hits}
+        if on_progress is not None:
+            on_progress(i / total)
     return run
 
 
@@ -144,10 +150,29 @@ def run_experiment(job_id: str) -> None:
                     vectors = embed_texts([queries[q] for q in qids])
                     query_vectors = dict(zip(qids, vectors, strict=True))
 
-            run_a = _build_run(session, variant_a, queries, query_vectors, top_k=100)
-            state["progress"] = 0.5
-            _write(job_id, state)
-            run_b = _build_run(session, variant_b, queries, query_vectors, top_k=100)
+            # Smooth progress: variant A fills 0→50%, variant B fills 50→100%. Throttled
+            # to whole-percent changes so Redis sees at most ~100 small writes per run.
+            _last = {"pct": -1}
+
+            def _report(base: float, span: float):
+                def cb(frac: float) -> None:
+                    value = base + span * frac
+                    pct = int(value * 100)
+                    if pct != _last["pct"]:
+                        _last["pct"] = pct
+                        state["progress"] = round(value, 3)
+                        _write(job_id, state)
+
+                return cb
+
+            run_a = _build_run(
+                session, variant_a, queries, query_vectors, top_k=100,
+                on_progress=_report(0.0, 0.5),
+            )
+            run_b = _build_run(
+                session, variant_b, queries, query_vectors, top_k=100,
+                on_progress=_report(0.5, 0.5),
+            )
 
         eval_a = evaluate(qrels, run_a)
         eval_b = evaluate(qrels, run_b)
