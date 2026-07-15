@@ -1,0 +1,31 @@
+# Fly.io config for the ParadeDB instance (pg_search BM25 + pgvector in one Postgres).
+# pg_search is ParadeDB-specific and unavailable on managed Postgres add-ons, so the DB
+# runs as this image with a persistent volume. Both dataset databases
+# (productrank_msmarco, productrank_fiqa) live inside this one instance / one volume.
+#
+# Deploy:
+#   fly volumes create pgdata --size 3 --region iad -a productrank-db
+#   fly secrets set POSTGRES_PASSWORD=... -a productrank-db
+#   fly deploy -c deploy/fly.paradedb.toml
+#
+# Reachable from the API over the private network at:  productrank-db.internal:5432
+# No public service block — the database is internal-only.
+
+app = "productrank-db"
+primary_region = "iad"
+
+[build]
+  image = "paradedb/paradedb:0.15.26-pg17"
+
+[env]
+  POSTGRES_USER = "productrank"
+  POSTGRES_DB = "postgres"        # bootstrap db; createdbs.py adds the two dataset dbs
+  PGDATA = "/var/lib/postgresql/data/pgdata"
+
+[mounts]
+  source = "pgdata"
+  destination = "/var/lib/postgresql/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

@@ -1,0 +1,18 @@
+# Build context hygiene for the API image (deploy/Dockerfile.api).
+.git
+.venv
+**/__pycache__
+.mypy_cache
+.ruff_cache
+.pytest_cache
+node_modules
+frontend/.next
+frontend/node_modules
+# Frontend deploys separately (Vercel); not needed in the API image.
+frontend
+# Large downloaded datasets — seeded on the host, never baked into the image.
+data/raw
+*.zip
+.env
+.DS_Store
+# Keep results/*.json (the dashboard reads them) — do NOT ignore results/.

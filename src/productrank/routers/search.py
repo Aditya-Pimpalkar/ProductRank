@@ -7,12 +7,12 @@ the short result-set TTL bounds staleness if the index changes (ARCHITECTURE §6
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from productrank import cache
-from productrank.db import get_session
+from productrank.db import session_for
 from productrank.observability import metrics
 from productrank.observability.logging import get_logger
 from productrank.ratelimit import limiter
@@ -49,37 +49,44 @@ def _hydrate(session: Session, hits) -> list[Hit]:
 def search_endpoint(
     request: Request,  # required by slowapi for per-IP keying
     body: SearchRequest,
-    session: Session = Depends(get_session),
 ) -> SearchResponse:
     variant = body.variant
+    dataset = body.dataset.value  # validated by the Dataset enum → safe to route on
 
-    cached = cache.get_result(variant.value, body.query, body.top_k)
+    cached = cache.get_result(dataset, variant.value, body.query, body.top_k)
     if cached is not None:
         metrics.record_search(variant.value, cache_hit=True)
         return SearchResponse(**cached, cache_hit=True)
 
-    result = search(
-        session,
-        body.query,
-        variant,
-        top_k=body.top_k,
-        candidate_k=body.candidate_k,
-    )
+    # Resolve the session for the requested dataset and run the (unchanged) pipeline.
+    with session_for(dataset) as session:
+        result = search(
+            session,
+            body.query,
+            variant,
+            top_k=body.top_k,
+            candidate_k=body.candidate_k,
+        )
+        hits = _hydrate(session, result.hits)
+
     payload = SearchResponse(
         variant=variant,
         query=body.query,
         total_latency_ms=result.total_latency_ms,
         stage_latency_ms=result.stage_latency_ms,
         candidate_counts=result.candidate_counts,
-        hits=_hydrate(session, result.hits),
+        hits=hits,
         cache_hit=False,
     )
 
     metrics.record_stage_latencies(variant.value, result.stage_latency_ms)
     metrics.record_search(variant.value, cache_hit=False)
-    cache.set_result(variant.value, body.query, body.top_k, payload.model_dump(exclude={"cache_hit"}))
+    cache.set_result(
+        dataset, variant.value, body.query, body.top_k, payload.model_dump(exclude={"cache_hit"})
+    )
     log.info(
         "search",
+        dataset=dataset,
         variant=variant.value,
         top_k=body.top_k,
         latency_ms=result.total_latency_ms,

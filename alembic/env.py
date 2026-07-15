@@ -16,7 +16,14 @@ from productrank.config import settings
 from productrank.db import Base
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+
+# Target a specific dataset's database with `-x dataset=fiqa` (defaults to the app's
+# default dataset). This applies migrations to each database in the
+# two-databases-in-one-instance setup.
+_x = context.get_x_argument(as_dictionary=True)
+_dataset = _x.get("dataset")
+DB_URL = settings.database_url_for(_dataset) if _dataset else settings.database_url
+config.set_main_option("sqlalchemy.url", DB_URL)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -26,7 +33,7 @@ target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=settings.database_url,
+        url=DB_URL,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -37,7 +44,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     section = config.get_section(config.config_ini_section, {})
-    section["sqlalchemy.url"] = settings.database_url
+    section["sqlalchemy.url"] = DB_URL
     connectable = engine_from_config(section, prefix="sqlalchemy.", poolclass=pool.NullPool)
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)

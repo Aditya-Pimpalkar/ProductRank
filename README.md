@@ -12,12 +12,16 @@ differences.
 The project runs at demonstration scale (≤57K documents, pretrained models, single node).
 The architecture is built the way production systems are; the scale is stated honestly.
 
+<!-- LIVE DEMO: <url> -->
+<!-- DEMO GIF: assets/demo.gif -->
+
 ---
 
 ## Table of contents
 
 - [Key results](#key-results)
 - [Reranker domain transfer](#reranker-domain-transfer)
+- [What I learned](#what-i-learned)
 - [High-level design](#high-level-design)
 - [Low-level design](#low-level-design)
 - [Evaluation methodology](#evaluation-methodology)
@@ -37,6 +41,11 @@ The architecture is built the way production systems are; the scale is stated ho
 Measured with [`pytrec_eval`](https://github.com/cvangysel/pytrec_eval) (the standard
 `trec_eval` binding), with paired t-test + bootstrap confidence intervals on per-query
 NDCG@10. Two datasets serve two distinct purposes.
+
+> **Counterintuitive finding:** the *same* cross-encoder dominates in-domain on MS MARCO
+> (+0.099 NDCG@10, p=9e-30) yet *degrades* results out-of-domain on FiQA. Domain match
+> matters more than reranker quality — see
+> [Reranker domain transfer](#reranker-domain-transfer).
 
 ### FiQA `test` — full corpus, literature-comparable baseline
 
@@ -92,6 +101,18 @@ the cross-encoder reranks dense's own top-100 on FiQA, it still loses to dense (
 raises Recall@100 (0.961 → 0.993), but an equal-weight blend with the ~20-point weaker
 BM25 pushes the single relevant doc just below rank 1; the reranker then reorders that
 richer pool back to the top.
+
+---
+
+## What I learned
+
+- **IDF weighting is non-negotiable for sparse retrieval** — stock Postgres FTS scored
+  NDCG@10 ≈ 0.06 on FiQA, versus 0.239 once the sparse stage used real BM25 (`pg_search`).
+- **Reranker domain match matters more than reranker quality** — a strong general embedding
+  beat an out-of-domain cross-encoder on FiQA, while the same reranker dominated in-domain
+  on MS MARCO.
+- **RRF dilutes a dominant signal** — equal-weight fusion with a ~20-point-weaker BM25
+  pushed the relevant document below rank 1 until the reranker recovered it.
 
 ---
 
@@ -392,8 +413,10 @@ HF_HUB_OFFLINE=1 RERANK_DEVICE=cpu uv run pytest    # incl. integration/e2e (nee
 
 Unit tests cover RRF math, the `pytrec_eval` wrappers, significance, the cache, and API
 validation. Integration/e2e tests run the pipeline against the seeded corpus and assert
-NDCG clears a threshold, guarding against silent ranking regressions. CI (GitHub Actions)
-runs lint, type-check, and the unit suite on push.
+NDCG clears a threshold, guarding against silent ranking regressions (they self-skip when
+no seeded Postgres is present). CI (GitHub Actions), on every push and pull request, runs
+`ruff` lint, `ruff format --check`, the unit suite, and a `pip-audit` dependency scan
+(report-only).
 
 ---
 

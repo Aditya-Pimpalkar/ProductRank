@@ -10,32 +10,50 @@ from __future__ import annotations
 
 import argparse
 
+from productrank.config import DATASET_SPLIT, DATASETS, DEFAULT_DATASET
+
 
 def _cmd_embed(args: argparse.Namespace) -> None:
     from productrank.embed import build_ivfflat_index, embed_corpus
 
-    embed_corpus()
-    build_ivfflat_index()
+    embed_corpus(dataset=args.dataset)
+    build_ivfflat_index(dataset=args.dataset)
 
 
 def _cmd_embed_only(args: argparse.Namespace) -> None:
     from productrank.embed import embed_corpus
 
-    embed_corpus()
+    embed_corpus(dataset=args.dataset)
 
 
 def _cmd_build_index(args: argparse.Namespace) -> None:
     from productrank.embed import build_ivfflat_index
 
-    build_ivfflat_index()
+    build_ivfflat_index(dataset=args.dataset)
 
 
 def _cmd_eval(args: argparse.Namespace) -> None:
     from productrank.evaluation.run import run_evaluation
 
     only = args.variants.split(",") if args.variants else None
+    # Default the qrels split from the dataset unless the caller overrides it.
+    split = args.split or DATASET_SPLIT[args.dataset]
     run_evaluation(
-        limit=args.limit, top_k=args.top_k, split=args.split, only=only, tag=args.tag
+        limit=args.limit,
+        top_k=args.top_k,
+        split=split,
+        only=only,
+        tag=args.tag,
+        dataset=args.dataset,
+    )
+
+
+def _add_dataset_arg(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--dataset",
+        choices=DATASETS,
+        default=DEFAULT_DATASET,
+        help=f"which dataset's database to target (default: {DEFAULT_DATASET})",
     )
 
 
@@ -43,14 +61,20 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="productrank")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("embed", help="embed corpus (resumable) then build IVFFlat index")
-    sub.add_parser("embed-only", help="embed corpus without building the index")
-    sub.add_parser("build-index", help="(re)build the IVFFlat dense index")
+    for name, help_text in [
+        ("embed", "embed corpus (resumable) then build IVFFlat index"),
+        ("embed-only", "embed corpus without building the index"),
+        ("build-index", "(re)build the IVFFlat dense index"),
+    ]:
+        _add_dataset_arg(sub.add_parser(name, help=help_text))
 
     ev = sub.add_parser("eval", help="evaluate all four variants over the query set")
+    _add_dataset_arg(ev)
     ev.add_argument("--limit", type=int, default=None, help="max queries (default: all)")
     ev.add_argument("--top-k", type=int, default=100, help="retrieval depth for metrics")
-    ev.add_argument("--split", default="test", help="query split to evaluate")
+    ev.add_argument(
+        "--split", default=None, help="qrels split (default: derived from --dataset)"
+    )
     ev.add_argument(
         "--variants",
         default=None,

@@ -11,16 +11,22 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 
+from productrank.config import DATASET_SPLIT
+from productrank.schemas import Dataset
+
 router = APIRouter(prefix="/v1", tags=["results"])
 
 RESULTS_DIR = Path("results")
 
 
 @router.get("/results")
-def get_results(split: str = "dev") -> dict:
+def get_results(dataset: Dataset = Dataset.MSMARCO) -> dict:
+    # dataset → split (msmarco→dev, fiqa→test). The dashboard toggles by dataset; this is
+    # the single mapping point, so search and the dashboard always reflect the same corpus.
+    split = DATASET_SPLIT[dataset.value]
     path = RESULTS_DIR / f"eval_{split}.json"
     if not path.exists():
-        raise HTTPException(404, f"no results for split={split}; run `productrank eval`")
+        raise HTTPException(404, f"no results for dataset={dataset.value}; run `productrank eval`")
     data = json.loads(path.read_text())
     # Trim per-query payload — the dashboard only needs the aggregate table + timings.
     return {
