@@ -12,8 +12,7 @@ differences.
 The project runs at demonstration scale (≤57K documents, pretrained models, single node).
 The architecture is built the way production systems are; the scale is stated honestly.
 
-<!-- LIVE DEMO: once deployed, replace the line below with: **Live demo:** <url> -->
-_Live demo: coming soon._
+**🔗 Live demo: https://productrank-mauve.vercel.app** — search comparison, A/B runner, and analytics over both datasets (MS MARCO + FiQA), switchable in the header.
 
 <!-- DEMO GIF: record localhost:3000, save as assets/demo.gif, then uncomment the next line -->
 <!-- ![ProductRank demo](assets/demo.gif) -->
