@@ -16,6 +16,8 @@ The architecture is built the way production systems are; the scale is stated ho
 
 ![ProductRank demo — four-variant search comparison, dataset toggle, and analytics](assets/demo.gif)
 
+▶ Smoother full recording (MP4): [`assets/demo.mp4`](assets/demo.mp4)
+
 ---
 
 ## Table of contents
