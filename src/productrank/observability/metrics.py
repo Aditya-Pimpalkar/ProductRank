@@ -17,7 +17,18 @@ from prometheus_client import Counter, Histogram
 
 # Buckets tuned for a retrieval path: sub-ms fusion up to multi-second cold rerank.
 _LATENCY_BUCKETS = (
-    0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+    0.001,
+    0.005,
+    0.01,
+    0.025,
+    0.05,
+    0.1,
+    0.25,
+    0.5,
+    1.0,
+    2.5,
+    5.0,
+    10.0,
 )
 
 STAGE_LATENCY = Histogram(

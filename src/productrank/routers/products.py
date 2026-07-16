@@ -17,6 +17,4 @@ def get_product(doc_id: str, dataset: Dataset = Dataset.MSMARCO) -> ProductRespo
         doc = session.get(Document, doc_id)
         if doc is None:
             raise HTTPException(status_code=404, detail=f"document {doc_id} not found")
-        return ProductResponse(
-            id=doc.id, title=doc.title, text=doc.text, metadata=doc.doc_metadata
-        )
+        return ProductResponse(id=doc.id, title=doc.title, text=doc.text, metadata=doc.doc_metadata)

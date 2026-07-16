@@ -69,8 +69,10 @@ def main(n: int = 60) -> None:
         print(f"\nReranker: {settings.rerank_model}   (n={len(queries)} queries)\n")
         for name, run in runs.items():
             res = evaluate(qrels, run)
-            print(f"  {name:16s} NDCG@10={res.aggregate['ndcg_cut_10']:.4f}  "
-                  f"MRR={res.aggregate['recip_rank']:.4f}")
+            print(
+                f"  {name:16s} NDCG@10={res.aggregate['ndcg_cut_10']:.4f}  "
+                f"MRR={res.aggregate['recip_rank']:.4f}"
+            )
 
 
 if __name__ == "__main__":

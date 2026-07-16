@@ -50,6 +50,7 @@ def _hash(text: str) -> str:
 
 # --- query embedding cache -------------------------------------------------
 
+
 def get_query_embedding(query: str) -> list[float] | None:
     client = get_client()
     if client is None:
@@ -66,6 +67,7 @@ def set_query_embedding(query: str, vector: list[float]) -> None:
 
 
 # --- result-set cache ------------------------------------------------------
+
 
 def get_result(dataset: str, variant: str, query: str, top_k: int) -> Any | None:
     client = get_client()

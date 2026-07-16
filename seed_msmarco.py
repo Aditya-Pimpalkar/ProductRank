@@ -46,8 +46,10 @@ def main() -> None:
         n_distractors=args.distractors,
         seed=args.seed,
     )
-    print(f"  sampled {len(sample.query_ids)} queries, "
-          f"{len(sample.relevant_doc_ids)} relevant passages, {len(sample.qrels)} qrels")
+    print(
+        f"  sampled {len(sample.query_ids)} queries, "
+        f"{len(sample.relevant_doc_ids)} relevant passages, {len(sample.qrels)} qrels"
+    )
 
     # MS MARCO always seeds into the `msmarco` database (Path 2: one database per dataset).
     # Wiping is scoped to that database only — it never touches the fiqa database.

@@ -58,9 +58,7 @@ def _seeded() -> bool:
 
 @pytest.mark.skipif(not _seeded(), reason="corpus not seeded")
 def test_bm25_search_happy_path():
-    r = client.post(
-        "/v1/search", json={"query": "401k rollover", "variant": "bm25", "top_k": 5}
-    )
+    r = client.post("/v1/search", json={"query": "401k rollover", "variant": "bm25", "top_k": 5})
     assert r.status_code == 200
     body = r.json()
     assert body["variant"] == "bm25"

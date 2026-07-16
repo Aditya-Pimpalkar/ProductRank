@@ -166,11 +166,19 @@ def run_experiment(job_id: str) -> None:
                 return cb
 
             run_a = _build_run(
-                session, variant_a, queries, query_vectors, top_k=100,
+                session,
+                variant_a,
+                queries,
+                query_vectors,
+                top_k=100,
                 on_progress=_report(0.0, 0.5),
             )
             run_b = _build_run(
-                session, variant_b, queries, query_vectors, top_k=100,
+                session,
+                variant_b,
+                queries,
+                query_vectors,
+                top_k=100,
                 on_progress=_report(0.5, 0.5),
             )
 
@@ -205,7 +213,9 @@ def run_experiment(job_id: str) -> None:
             }
         )
         _write(job_id, state)
-        log.info("experiment_done", job_id=job_id, dataset=dataset, a=variant_a.value, b=variant_b.value)
+        log.info(
+            "experiment_done", job_id=job_id, dataset=dataset, a=variant_a.value, b=variant_b.value
+        )
     except Exception as exc:  # noqa: BLE001 — surface failure in job state, never crash
         state["status"] = "error"
         state["error"] = str(exc)

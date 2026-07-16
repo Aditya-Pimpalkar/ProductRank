@@ -72,9 +72,7 @@ def main() -> None:
     _add_dataset_arg(ev)
     ev.add_argument("--limit", type=int, default=None, help="max queries (default: all)")
     ev.add_argument("--top-k", type=int, default=100, help="retrieval depth for metrics")
-    ev.add_argument(
-        "--split", default=None, help="qrels split (default: derived from --dataset)"
-    )
+    ev.add_argument("--split", default=None, help="qrels split (default: derived from --dataset)")
     ev.add_argument(
         "--variants",
         default=None,

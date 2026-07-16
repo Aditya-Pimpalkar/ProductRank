@@ -81,3 +81,21 @@ seed + embed steps (seeding wipes only that dataset's database).
   simultaneous A/B jobs. Worst case under sustained abuse is bounded to a few dollars/day;
   CPU (rerank), not OpenAI spend, is the binding limit.
 - One-time FiQA embedding is ~$0.10–0.20; MS MARCO ~$0.05–0.10.
+
+## Faster path: restore precomputed embeddings (avoid re-embedding)
+
+On a rate-limited OpenAI tier, embedding ~108K docs on-host can take hours. Since the
+embeddings are deterministic for a fixed model, prefer reusing precomputed vectors:
+
+- **Fly volume snapshot (recommended).** Once both DBs are embedded, the ParadeDB volume
+  holds everything. Snapshot it (`fly volumes snapshots create <vol> -a productrank-db`)
+  and restore future environments from that snapshot — a fresh DB comes up already
+  populated in seconds, no re-embedding.
+- **Dump / restore.** If you have the corpora embedded elsewhere (e.g. a local ParadeDB),
+  `pg_dump --data-only` each database and load it on the DB machine. Do the load *on the
+  Fly side* (over the private network), not from a laptop over `fly proxy` — the wireguard
+  tunnel stalls under a sustained bulk COPY. For a big load, drop the `documents_bm25`
+  index first and recreate it after (bulk build), then rebuild the IVFFlat index.
+
+The one-time seed+embed sequence above is the from-scratch path; the snapshot is how you
+redeploy quickly afterward.
