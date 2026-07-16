@@ -14,8 +14,7 @@ The architecture is built the way production systems are; the scale is stated ho
 
 **🔗 Live demo: https://productrank-mauve.vercel.app** — search comparison, A/B runner, and analytics over both datasets (MS MARCO + FiQA), switchable in the header.
 
-<!-- DEMO GIF: record localhost:3000, save as assets/demo.gif, then uncomment the next line -->
-<!-- ![ProductRank demo](assets/demo.gif) -->
+![ProductRank demo — four-variant search comparison, dataset toggle, and analytics](assets/demo.gif)
 
 ---
 
